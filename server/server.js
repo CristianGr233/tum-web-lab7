@@ -51,7 +51,7 @@ function saveDB() {
 }
 
 // ======================
-// JWT TOKEN ENDPOINT
+// TOKEN ENDPOINT
 // ======================
 app.post("/token", (req, res) => {
   const { role } = req.body
@@ -111,7 +111,7 @@ app.get("/health", (req, res) => {
 })
 
 // ======================
-// GET DESTINATIONS (PROTECTED + PAGINATION)
+// GET DESTINATIONS (READ + PAGINATION)
 // ======================
 app.get("/destinations", auth("READ"), (req, res) => {
   const page = parseInt(req.query.page || 1)
@@ -125,6 +125,72 @@ app.get("/destinations", auth("READ"), (req, res) => {
     total: destinations.length,
     page
   })
+})
+
+// ======================
+// CREATE DESTINATION
+// ======================
+app.post("/destinations", auth("WRITE"), (req, res) => {
+  const { name, country, lat, lng } = req.body
+
+  if (!name || !country || lat === undefined || lng === undefined) {
+    return res.status(400).json({ error: "Missing required fields" })
+  }
+
+  const newDestination = {
+    id: Date.now(),
+    ...req.body,
+    rating: req.body.rating || 3,
+    visited: req.body.visited || false
+  }
+
+  destinations.unshift(newDestination)
+  saveDB()
+
+  res.status(201).json(newDestination)
+})
+
+// ======================
+// UPDATE DESTINATION
+// ======================
+app.put("/destinations/:id", auth("WRITE"), (req, res) => {
+  const id = parseInt(req.params.id)
+
+  const index = destinations.findIndex(d => d.id === id)
+
+  if (index === -1) {
+    return res.status(404).json({ error: "Destination not found" })
+  }
+
+  destinations[index] = {
+    ...destinations[index],
+    ...req.body
+  }
+
+  saveDB()
+
+  res.json({
+    message: "Updated successfully",
+    data: destinations[index]
+  })
+})
+
+// ======================
+// DELETE DESTINATION
+// ======================
+app.delete("/destinations/:id", auth("DELETE"), (req, res) => {
+  const id = parseInt(req.params.id)
+
+  const index = destinations.findIndex(d => d.id === id)
+
+  if (index === -1) {
+    return res.status(404).json({ error: "Destination not found" })
+  }
+
+  destinations.splice(index, 1)
+  saveDB()
+
+  res.json({ message: "Deleted successfully" })
 })
 
 // ======================
