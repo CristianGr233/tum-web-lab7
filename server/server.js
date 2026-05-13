@@ -3,6 +3,7 @@ const jwt = require("jsonwebtoken")
 const cors = require("cors")
 const bodyParser = require("body-parser")
 const fs = require("fs")
+const swaggerUi = require("swagger-ui-express")
 
 const app = express()
 app.use(cors())
@@ -51,7 +52,7 @@ function saveDB() {
 }
 
 // ======================
-// TOKEN ENDPOINT
+// JWT TOKEN ENDPOINT
 // ======================
 app.post("/token", (req, res) => {
   const { role } = req.body
@@ -104,6 +105,53 @@ function auth(requiredPermission) {
 }
 
 // ======================
+// SWAGGER CONFIG
+// ======================
+const swaggerSpec = {
+  openapi: "3.0.0",
+  info: {
+    title: "Travel Tracker API",
+    version: "1.0.0",
+    description: "CRUD API with JWT authentication"
+  },
+  servers: [
+    {
+      url: "http://localhost:5000"
+    }
+  ],
+  paths: {
+    "/token": {
+      post: {
+        summary: "Generate JWT token",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  role: {
+                    type: "string",
+                    enum: ["ADMIN", "WRITER", "VISITOR"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          200: {
+            description: "Token generated"
+          }
+        }
+      }
+    }
+  }
+}
+
+app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec))
+
+// ======================
 // HEALTH CHECK
 // ======================
 app.get("/health", (req, res) => {
@@ -111,7 +159,7 @@ app.get("/health", (req, res) => {
 })
 
 // ======================
-// GET DESTINATIONS (READ + PAGINATION)
+// GET DESTINATIONS
 // ======================
 app.get("/destinations", auth("READ"), (req, res) => {
   const page = parseInt(req.query.page || 1)
@@ -128,7 +176,7 @@ app.get("/destinations", auth("READ"), (req, res) => {
 })
 
 // ======================
-// CREATE DESTINATION
+// CREATE
 // ======================
 app.post("/destinations", auth("WRITE"), (req, res) => {
   const { name, country, lat, lng } = req.body
@@ -151,7 +199,7 @@ app.post("/destinations", auth("WRITE"), (req, res) => {
 })
 
 // ======================
-// UPDATE DESTINATION
+// UPDATE
 // ======================
 app.put("/destinations/:id", auth("WRITE"), (req, res) => {
   const id = parseInt(req.params.id)
@@ -176,7 +224,7 @@ app.put("/destinations/:id", auth("WRITE"), (req, res) => {
 })
 
 // ======================
-// DELETE DESTINATION
+// DELETE
 // ======================
 app.delete("/destinations/:id", auth("DELETE"), (req, res) => {
   const id = parseInt(req.params.id)
@@ -199,4 +247,5 @@ app.delete("/destinations/:id", auth("DELETE"), (req, res) => {
 const PORT = process.env.PORT || 5000
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`)
+  console.log(`Swagger docs available at http://localhost:${PORT}/docs`)
 })
