@@ -1,0 +1,114 @@
+@import "tailwindcss";
+
+/* =========================
+   BASE LAYOUT
+========================= */
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/* smoother text rendering + less “zoomed” feel */
+body {
+  @apply antialiased text-sm;
+}
+
+/* =========================
+   DARK MODE ROOT BEHAVIOR
+   (works with class="dark")
+========================= */
+
+.dark body {
+  background-color: #09090b; /* zinc-950 */
+  color: white;
+}
+
+/* =========================
+   MAP FIXES (Leaflet)
+========================= */
+
+.leaflet-container {
+  outline: none;
+  border: none;
+  background-color: transparent !important;
+}
+
+/* prevent weird gray tiles flash */
+.leaflet-tile {
+  filter: none !important;
+}
+
+/* =========================
+   FORM CONTROLS (GLOBAL FIX)
+   THIS FIXES YOUR ISSUE
+========================= */
+
+input,
+textarea,
+select {
+  @apply p-2 border rounded bg-white text-black;
+  @apply text-sm;
+  @apply placeholder-gray-400;
+  transition: all 0.2s ease;
+}
+
+/* DARK MODE INPUTS */
+.dark input,
+.dark textarea,
+.dark select {
+  @apply bg-zinc-900 text-white border-zinc-700;
+}
+
+/* focus visibility */
+input:focus,
+textarea:focus,
+select:focus {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+
+/* =========================
+   BUTTONS (SLIGHTLY SMALLER UI)
+========================= */
+
+button {
+  @apply text-sm;
+}
+
+/* =========================
+   IMAGES
+========================= */
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+/* =========================
+   LIST / CARD OPTIMIZATION
+   (reduces "zoomed UI" feel)
+========================= */
+
+.card,
+[class*="rounded"] {
+  font-size: 0.9rem;
+}
+
+/* =========================
+   OPTIONAL: SCROLLBAR CLEANUP
+========================= */
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 10px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #444;
+}
