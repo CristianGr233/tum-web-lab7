@@ -1,4 +1,5 @@
 const express = require("express")
+const jwt = require("jsonwebtoken")
 const cors = require("cors")
 const bodyParser = require("body-parser")
 const fs = require("fs")
@@ -6,6 +7,8 @@ const fs = require("fs")
 const app = express()
 app.use(cors())
 app.use(bodyParser.json())
+
+const SECRET = "super_secret_key"
 
 const DB_FILE = "./destinations.json"
 
@@ -46,6 +49,33 @@ let destinations = fs.existsSync(DB_FILE)
 function saveDB() {
   fs.writeFileSync(DB_FILE, JSON.stringify(destinations, null, 2))
 }
+
+// ======================
+// JWT AUTH - TOKEN ENDPOINT
+// ======================
+app.post("/token", (req, res) => {
+  const { role } = req.body
+
+  let permissions = []
+
+  if (role === "ADMIN") {
+    permissions = ["READ", "WRITE", "DELETE"]
+  } else if (role === "WRITER") {
+    permissions = ["READ", "WRITE"]
+  } else if (role === "VISITOR") {
+    permissions = ["READ"]
+  } else {
+    return res.status(400).json({ error: "Invalid role" })
+  }
+
+  const token = jwt.sign(
+    { role, permissions },
+    SECRET,
+    { expiresIn: "1m" }
+  )
+
+  res.json({ token })
+})
 
 // ======================
 // HEALTH CHECK
