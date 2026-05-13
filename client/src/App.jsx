@@ -116,7 +116,7 @@ export default function App() {
     setPage(1)
     await fetchDestinations(data.token, 1)
   }
-
+  }
 
 
 const logout = () => {
