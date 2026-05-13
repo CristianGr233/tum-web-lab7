@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
+const API = import.meta.env.VITE_API
 
 export default function App() {
   const defaultDestinations = [
@@ -31,11 +32,10 @@ export default function App() {
     }
   ]
 
-  const [destinations, setDestinations] = useState(() => {
-    const saved = localStorage.getItem('travel-destinations')
-    return saved ? JSON.parse(saved) : defaultDestinations
-  })
+  const [destinations, setDestinations] = useState([])
 
+  const [token, setToken] = useState("")
+  const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('All')
   const [darkMode, setDarkMode] = useState(false)
@@ -55,24 +55,89 @@ export default function App() {
     lng: ''
   })
 
+
+
+  const permissions = token
+  ? JSON.parse(atob(token.split(".")[1])).permissions
+  : []
   useEffect(() => {
     const savedTheme = localStorage.getItem('travel-theme')
     if (savedTheme === 'dark') setDarkMode(true)
   }, [])
-
   useEffect(() => {
-    localStorage.setItem('travel-destinations', JSON.stringify(destinations))
-  }, [destinations])
+    if (token) {
+      fetchDestinations()
+    }
+  }, [page])
 
   useEffect(() => {
     localStorage.setItem('travel-theme', darkMode ? 'dark' : 'light')
   }, [darkMode])
-  
+
+  useEffect(() => {
+  const saved = localStorage.getItem("token")
+  if (saved) setToken(saved)
+}, [])
   const scrollToList = () => {
   const el = document.getElementById('destination-list-section')
   if (el) {
     el.scrollIntoView({ behavior: 'smooth' })
   }
+}
+  const resetForm = () => {
+  setForm({
+    name: '',
+    country: '',
+    category: 'City',
+    rating: 3,
+    notes: '',
+    image: '',
+    lat: '',
+    lng: ''
+  })
+
+  setEditingId(null)
+  setLocationQuery('')
+  setLocationResults([])
+}
+  const login = async (role) => {
+  const res = await fetch(`${API}/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ role })
+  })
+
+  const data = await res.json()
+
+  if (data.token) {
+    localStorage.setItem("token", data.token)
+    setToken(data.token)
+
+    setPage(1)
+    await fetchDestinations(data.token, 1)
+  }
+
+
+
+const logout = () => {
+  localStorage.removeItem("token")
+  setToken("")
+  setDestinations([])
+}
+
+
+const fetchDestinations = async (customToken, pageNumber = page) => {
+  const res = await fetch(
+    `${API}/destinations?page=${pageNumber}&limit=6`,
+    {
+      headers: {
+        Authorization: `Bearer ${customToken || token}`
+      }
+    }
+  )
+
+  const data = await res.json()
+  setDestinations(Array.isArray(data.data) ? data.data : [])
 }
 
   const searchLocation = async () => {
@@ -92,45 +157,31 @@ export default function App() {
     }
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
 
     if (!form.name || !form.country) return
 
-    const imageValue =
-      form.image && form.image.length > 0
-        ? form.image
-        : 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=1200&auto=format&fit=crop'
+    const method = editingId ? "PUT" : "POST"
+    const url = editingId
+      ? `${API}/destinations/${editingId}`
+      : `${API}/destinations`
 
-    if (editingId) {
-      setDestinations(
-        destinations.map((d) =>
-          d.id === editingId
-            ? {
-                ...d,
-                ...form,
-                lat: parseFloat(form.lat),
-                lng: parseFloat(form.lng),
-                image: imageValue
-              }
-            : d
-        )
-      )
+    await fetch(url, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        ...form,
+        rating: Number(form.rating),
+        lat: Number(form.lat),
+        lng: Number(form.lng)
+      })
+    })
 
-      setEditingId(null)
-    } else {
-      setDestinations([
-        {
-          id: Date.now(),
-          ...form,
-          lat: parseFloat(form.lat),
-          lng: parseFloat(form.lng),
-          image: imageValue,
-          visited: false
-        },
-        ...destinations
-      ])
-    }
+    await fetchDestinations()
 
     setForm({
       name: '',
@@ -143,20 +194,35 @@ export default function App() {
       lng: ''
     })
 
-    setLocationQuery('')
+    setEditingId(null)
   }
 
-  const removeDestination = (id) => {
-    setDestinations(destinations.filter((d) => d.id !== id))
-  }
+  const removeDestination = async (id) => {
+  await fetch(`${API}/destinations/${id}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  })
 
-  const toggleVisited = (id) => {
-    setDestinations(
-      destinations.map((d) =>
-        d.id === id ? { ...d, visited: !d.visited } : d
-      )
-    )
-  }
+  await fetchDestinations()
+}
+
+  const toggleVisited = async (d) => {
+  await fetch(`${API}/destinations/${d.id}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      ...d,
+      visited: !d.visited
+    })
+  })
+
+  await fetchDestinations()
+}
 
   const startEdit = (d) => {
     setEditingId(d.id)
@@ -231,6 +297,20 @@ export default function App() {
 
         {/* HEADER */}
         <div className="flex justify-between mb-8">
+          
+          <div className="flex gap-2 mb-4">
+            <button onClick={() => login("ADMIN")}>Admin</button>
+            <button onClick={() => login("WRITER")}>Writer</button>
+            <button onClick={() => login("VISITOR")}>Visitor</button>
+
+              <button
+                onClick={logout}
+                className="bg-black text-white px-3 py-1 rounded"
+              >
+                Logout
+              </button>
+          </div>
+
           <h1 className="text-4xl font-bold">Travel Tracker</h1>
 
           <button
@@ -242,207 +322,63 @@ export default function App() {
         </div>
 
         {/* FORM */}
-        <div
-          className={`p-6 rounded-3xl mb-8 ${
-            darkMode ? 'bg-zinc-900' : 'bg-white'
-          }`}
-        >
-          <h2 className="text-xl font-bold mb-4">
-            {editingId ? 'Edit Destination' : 'Add Destination'}
-          </h2>
+        
+        {permissions.includes("WRITE") && (
+  <div
+    className={`p-6 rounded-3xl mb-8 ${
+      darkMode ? 'bg-zinc-900' : 'bg-white'
+    }`}
+  >
+    <h2 className="text-xl font-bold mb-4">
+      {editingId ? 'Edit Destination' : 'Add Destination'}
+    </h2>
 
-          <form
-            onSubmit={handleSubmit}
-            className="grid md:grid-cols-2 gap-4"
-          >
-            <input
-              placeholder="Name"
-              value={form.name}
-              onChange={(e) =>
-                setForm({ ...form, name: e.target.value })
-              }
-              className="p-3 border rounded bg-transparent"
-            />
+    <form
+      onSubmit={handleSubmit}
+      className="grid md:grid-cols-2 gap-4"
+    >
+      <input
+        placeholder="Name"
+        value={form.name}
+        onChange={(e) =>
+          setForm({ ...form, name: e.target.value })
+        }
+        className="p-3 border rounded bg-transparent"
+      />
 
-            <input
-              placeholder="Country"
-              value={form.country}
-              onChange={(e) =>
-                setForm({ ...form, country: e.target.value })
-              }
-              className="p-3 border rounded bg-transparent"
-            />
+      <input
+        placeholder="Country"
+        value={form.country}
+        onChange={(e) =>
+          setForm({ ...form, country: e.target.value })
+        }
+        className="p-3 border rounded bg-transparent"
+      />
 
-            {/* LOCATION SEARCH */}
-            <div className="md:col-span-2">
-              <label className="block mb-2 font-semibold">
-                Search Location
-              </label>
+      <textarea
+        placeholder="Notes"
+        value={form.notes}
+        onChange={(e) =>
+          setForm({ ...form, notes: e.target.value })
+        }
+        className="p-3 border rounded md:col-span-2 bg-transparent"
+      />
 
-              <div className="flex gap-2">
-                <input
-                  placeholder="Search any place..."
-                  value={locationQuery}
-                  onChange={(e) =>
-                    setLocationQuery(e.target.value)
-                  }
-                  className="flex-1 p-3 border rounded bg-transparent"
-                />
+      <button className="bg-indigo-600 text-white p-3 rounded">
+        {editingId ? 'Update' : 'Add'}
+      </button>
 
-                <button
-                  type="button"
-                  onClick={searchLocation}
-                  className="bg-indigo-600 text-white px-4 rounded"
-                >
-                  Search
-                </button>
-              </div>
+      <button
+        type="button"
+        onClick={resetForm}
+        className="bg-gray-600 text-white p-3 rounded"
+      >
+        Clear
+      </button>
+    </form>
+  </div>
+)}
 
-              {locationResults.length > 0 && (
-                <div className="mt-3 border rounded-xl overflow-hidden max-h-64 overflow-y-auto">
-
-                  {locationResults.map((place) => (
-                    <button
-                      key={place.place_id}
-                      type="button"
-                      onClick={async () => {
-                        const parts = place.display_name.split(',')
-
-                        const name = parts[0].trim()
-                        const country = parts[parts.length - 1].trim()
-
-                        const image = await fetchPlaceImage(name)
-
-                        setForm({
-                          ...form,
-                          name,
-                          country,
-                          lat: place.lat,
-                          lng: place.lon,
-                          image: image || ''
-                        })
-
-                        setLocationQuery(place.display_name)
-                        setLocationResults([])
-                      }}
-                      className="w-full text-left p-3 border-b hover:bg-black/5 dark:hover:bg-white/5"
-                    >
-                      {place.display_name}
-                    </button>
-                  ))}
-
-                </div>
-              )}
-            </div>
-
-            {/* IMAGE URL */}
-            <input
-              placeholder="Image URL"
-              value={form.image}
-              onChange={(e) =>
-                setForm({ ...form, image: e.target.value })
-              }
-              className="p-3 border rounded md:col-span-2 bg-transparent"
-            />
-
-            {/* FILE UPLOAD */}
-            <div className="md:col-span-2">
-              <label className="block mb-2 font-semibold">
-                Upload Image
-              </label>
-
-              <div className="flex items-center gap-4">
-
-                <input
-                  id="fileUpload"
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files[0]
-                    if (!file) return
-
-                    const reader = new FileReader()
-
-                    reader.onloadend = () => {
-                      setForm({
-                        ...form,
-                        image: reader.result
-                      })
-                    }
-
-                    reader.readAsDataURL(file)
-                  }}
-                />
-
-                <label
-                  htmlFor="fileUpload"
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-xl cursor-pointer hover:bg-indigo-700 transition"
-                >
-                  Choose File
-                </label>
-
-                <span className="text-sm opacity-70">
-                  {form.image
-                    ? 'Image selected ✓'
-                    : 'No file chosen'}
-                </span>
-              </div>
-
-              {/* PREVIEW */}
-              {form.image && (
-                <div className="relative mt-4 border rounded-xl overflow-hidden bg-black/10 dark:bg-black/40 max-w-md mx-auto">
-
-                  <div className="h-96 flex items-center justify-center">
-                    <img
-                      src={form.image}
-                      alt="preview"
-                      className="max-h-full max-w-full object-contain"
-                    />
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={removeImage}
-                    className="absolute top-2 right-2 bg-red-600 text-white w-8 h-8 rounded-full flex items-center justify-center hover:bg-red-700"
-                  >
-                    ✕
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <textarea
-              placeholder="Notes"
-              value={form.notes}
-              onChange={(e) =>
-                setForm({ ...form, notes: e.target.value })
-              }
-              className="p-3 border rounded md:col-span-2 bg-transparent"
-            />
-
-            <button className="bg-indigo-600 text-white p-3 rounded">
-              {editingId ? 'Update' : 'Add'}
-            </button>
-            <button
-              type="button"
-              onClick={cancelEdit}
-              className="bg-gray-600 text-white p-3 rounded"
-            >
-              Clear
-            </button>
-
-            {editingId && (
-              <button
-                type="button"
-                onClick={cancelEdit}
-                className="bg-gray-500 text-white p-3 rounded"
-              >
-                Cancel
-              </button>
-            )}
-          </form>
-        </div>
 
         {/* MAP */}
         <div className="w-full overflow-hidden rounded-2xl">
@@ -570,9 +506,7 @@ export default function App() {
 
                 <div className="flex gap-2 mt-4">
                   <button
-                    onClick={() =>
-                      toggleVisited(d.id)
-                    }
+                    onClick={() => toggleVisited(d)}
                     className="bg-green-600 text-white px-3 py-1 rounded"
                   >
                     {d.visited
@@ -580,25 +514,52 @@ export default function App() {
                       : 'Wishlist'}
                   </button>
 
+                  {permissions.includes("WRITE") && (
                   <button
                     onClick={() => startEdit(d)}
                     className="bg-blue-600 text-white px-3 py-1 rounded"
                   >
                     Edit
                   </button>
+                )}
 
+                  {permissions.includes("DELETE") && (
                   <button
-                    onClick={() =>
-                      removeDestination(d.id)
-                    }
+                    onClick={() => removeDestination(d.id)}
                     className="bg-red-600 text-white px-3 py-1 rounded"
                   >
                     Delete
                   </button>
+                )}
                 </div>
               </div>
             </div>
           ))}
+        </div>
+
+
+        <div className="flex justify-center gap-4 mt-10">
+  
+          <button
+            onClick={() => setPage((p) => Math.max(p - 1, 1))}
+            className="bg-gray-700 text-white px-5 py-2 rounded-xl"
+            disabled={page === 1}
+          >
+            Prev
+          </button>
+
+          <div className="px-5 py-2 rounded-xl bg-white dark:bg-zinc-900">
+            Page {page}
+          </div>
+
+          <button
+            onClick={() => setPage((p) => p + 1)}
+            className="bg-indigo-600 text-white px-5 py-2 rounded-xl"
+            disabled={destinations.length < 6}
+          >
+            Next
+          </button>
+
         </div>
 
       </div>
