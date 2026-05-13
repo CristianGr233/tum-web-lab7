@@ -51,7 +51,7 @@ function saveDB() {
 }
 
 // ======================
-// JWT AUTH - TOKEN ENDPOINT
+// JWT TOKEN ENDPOINT
 // ======================
 app.post("/token", (req, res) => {
   const { role } = req.body
@@ -78,10 +78,53 @@ app.post("/token", (req, res) => {
 })
 
 // ======================
+// JWT MIDDLEWARE
+// ======================
+function auth(requiredPermission) {
+  return (req, res, next) => {
+    const token = req.headers.authorization?.split(" ")[1]
+
+    if (!token) {
+      return res.status(401).json({ error: "No token provided" })
+    }
+
+    try {
+      const decoded = jwt.verify(token, SECRET)
+      req.user = decoded
+
+      if (!decoded.permissions?.includes(requiredPermission)) {
+        return res.status(403).json({ error: "Forbidden - insufficient permissions" })
+      }
+
+      next()
+    } catch (err) {
+      return res.status(401).json({ error: "Invalid token" })
+    }
+  }
+}
+
+// ======================
 // HEALTH CHECK
 // ======================
 app.get("/health", (req, res) => {
   res.json({ status: "ok" })
+})
+
+// ======================
+// GET DESTINATIONS (PROTECTED + PAGINATION)
+// ======================
+app.get("/destinations", auth("READ"), (req, res) => {
+  const page = parseInt(req.query.page || 1)
+  const limit = parseInt(req.query.limit || 6)
+
+  const start = (page - 1) * limit
+  const end = start + limit
+
+  res.json({
+    data: destinations.slice(start, end),
+    total: destinations.length,
+    page
+  })
 })
 
 // ======================
